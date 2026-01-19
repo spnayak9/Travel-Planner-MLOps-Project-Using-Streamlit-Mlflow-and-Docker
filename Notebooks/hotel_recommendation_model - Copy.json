@@ -1,0 +1,2303 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "VsqEu6jTcrRa"
+      },
+      "source": [
+        "# Hotel Recommendation System (Collaborative Filtering + MLflow)\n",
+        "\n",
+        "**Platform:** Google Colab\n",
+        "\n",
+        "**Key Features**\n",
+        "- User–Hotel Collaborative Filtering (Matrix Factorization)\n",
+        "- MLflow experiment tracking (Drive-backed)\n",
+        "- Streamlit-ready serialized artifacts\n",
+        "- No retraining during inference\n"
+      ],
+      "id": "VsqEu6jTcrRa"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "I1LbsAokcrRe"
+      },
+      "source": [
+        "## 1. Install Required Libraries"
+      ],
+      "id": "I1LbsAokcrRe"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "lQ5_BLwacrRf",
+        "outputId": "2af47838-8e4d-470b-e83c-2f554da75f7d"
+      },
+      "execution_count": 1,
+      "source": [
+        "!pip install -q mlflow scikit-learn scipy joblib pandas numpy"
+      ],
+      "id": "lQ5_BLwacrRf",
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\u001b[2K     \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m40.1/40.1 kB\u001b[0m \u001b[31m2.1 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m9.1/9.1 MB\u001b[0m \u001b[31m99.9 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m2.5/2.5 MB\u001b[0m \u001b[31m79.1 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m1.4/1.4 MB\u001b[0m \u001b[31m69.1 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m147.8/147.8 kB\u001b[0m \u001b[31m12.9 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m114.9/114.9 kB\u001b[0m \u001b[31m10.2 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m85.0/85.0 kB\u001b[0m \u001b[31m9.0 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m77.0/77.0 kB\u001b[0m \u001b[31m5.5 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m780.5/780.5 kB\u001b[0m \u001b[31m46.6 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m207.3/207.3 kB\u001b[0m \u001b[31m15.4 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[?25h"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "AMh6TbxVcrRh"
+      },
+      "source": [
+        "## 2. Mount Google Drive"
+      ],
+      "id": "AMh6TbxVcrRh"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "IIPvK0aLcrRh",
+        "outputId": "8000de19-2516-4710-96ce-dd1351ba85b6"
+      },
+      "execution_count": 2,
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/drive')"
+      ],
+      "id": "IIPvK0aLcrRh",
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Mounted at /content/drive\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "McTkeKpvcrRi"
+      },
+      "source": [
+        "## 3. Imports & Environment Setup"
+      ],
+      "id": "McTkeKpvcrRi"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "cnxxDF89crRi"
+      },
+      "execution_count": 3,
+      "source": [
+        "import os\n",
+        "import shutil\n",
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import joblib\n",
+        "import mlflow\n",
+        "\n",
+        "from sklearn.preprocessing import LabelEncoder\n",
+        "from sklearn.model_selection import train_test_split\n",
+        "from scipy.sparse.linalg import svds"
+      ],
+      "id": "cnxxDF89crRi",
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "KB2dCH67crRi"
+      },
+      "source": [
+        "## 4. Configure MLflow (Same Pattern as Gender Model)"
+      ],
+      "id": "KB2dCH67crRi"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "x4OX8pTPcrRj",
+        "outputId": "df6373bc-2239-4280-841d-860013fcae2f"
+      },
+      "execution_count": 4,
+      "source": [
+        "BASE_PATH = '/content/drive/MyDrive/Labmentix Projects/Travel planner MLops'\n",
+        "DATASET_PATH = f'{BASE_PATH}/datasets/hotels.csv'\n",
+        "MODEL_EXPORT_PATH = f'{BASE_PATH}/models/hotel_recommendation'\n",
+        "MLFLOW_PATH = f'{BASE_PATH}/mlruns'\n",
+        "\n",
+        "os.makedirs(MODEL_EXPORT_PATH, exist_ok=True)\n",
+        "\n",
+        "mlflow.set_tracking_uri(f'file:{MLFLOW_PATH}')\n",
+        "mlflow.set_experiment('Hotel_Recommendation_CF')"
+      ],
+      "id": "x4OX8pTPcrRj",
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "/usr/local/lib/python3.12/dist-packages/mlflow/tracking/_tracking_service/utils.py:178: FutureWarning: The filesystem tracking backend (e.g., './mlruns') will be deprecated in February 2026. Consider transitioning to a database backend (e.g., 'sqlite:///mlflow.db') to take advantage of the latest MLflow features. See https://github.com/mlflow/mlflow/issues/18534 for more details and migration guidance. For migrating existing data, https://github.com/mlflow/mlflow-export-import can be used.\n",
+            "  return FileStore(store_uri, store_uri)\n",
+            "2026/01/19 13:31:43 INFO mlflow.tracking.fluent: Experiment with name 'Hotel_Recommendation_CF' does not exist. Creating a new experiment.\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "<Experiment: artifact_location=('file:///content/drive/MyDrive/Labmentix Projects/Travel planner '\n",
+              " 'MLops/mlruns/728105731907324757'), creation_time=1768829503537, experiment_id='728105731907324757', last_update_time=1768829503537, lifecycle_stage='active', name='Hotel_Recommendation_CF', tags={}>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 4
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "3ivhKtwccrRj"
+      },
+      "source": [
+        "## 5. Load & Prepare Dataset"
+      ],
+      "id": "3ivhKtwccrRj"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "x3S_1jnlcrRk"
+      },
+      "execution_count": 5,
+      "source": [
+        "df = pd.read_csv(DATASET_PATH)\n",
+        "df = df[['userCode', 'name', 'price']].dropna()\n",
+        "\n",
+        "# Filter users with >= 2 interactions\n",
+        "user_counts = df.groupby('userCode').size()\n",
+        "valid_users = user_counts[user_counts >= 2].index\n",
+        "df = df[df['userCode'].isin(valid_users)]\n",
+        "\n",
+        "label_encoder = LabelEncoder()\n",
+        "df['hotel_encoded'] = label_encoder.fit_transform(df['name'])"
+      ],
+      "id": "x3S_1jnlcrRk",
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "-1RUY-zNcrRk"
+      },
+      "source": [
+        "## 6. Build Interaction Matrix"
+      ],
+      "id": "-1RUY-zNcrRk"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "k26FmzX5crRk"
+      },
+      "execution_count": 9,
+      "source": [
+        "interactions = df.groupby(['userCode', 'hotel_encoded'])['price'].sum().reset_index()\n",
+        "\n",
+        "# Filter interactions to ensure each userCode has at least 2 entries for stratification\n",
+        "interactions_counts = interactions.groupby('userCode').size()\n",
+        "valid_interactions_users = interactions_counts[interactions_counts >= 2].index\n",
+        "interactions = interactions[interactions['userCode'].isin(valid_interactions_users)]\n",
+        "\n",
+        "train_df, test_df = train_test_split(\n",
+        "    interactions,\n",
+        "    test_size=0.25,\n",
+        "    random_state=42,\n",
+        "    stratify=interactions['userCode']\n",
+        ")\n",
+        "\n",
+        "pivot_df = train_df.pivot(index='userCode', columns='hotel_encoded', values='price').fillna(0)\n",
+        "matrix = pivot_df.values"
+      ],
+      "id": "k26FmzX5crRk",
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "sBFu7aUEcrRk"
+      },
+      "source": [
+        "## 7. Train Collaborative Filtering Model (SVD)"
+      ],
+      "id": "sBFu7aUEcrRk"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "YRzK8j-_crRk"
+      },
+      "execution_count": 10,
+      "source": [
+        "K_desired = 20  # latent factors (higher accuracy than previous 8)\n",
+        "min_dim = min(matrix.shape)\n",
+        "\n",
+        "# Ensure K satisfies the condition 0 < k < min(A.shape)\n",
+        "K = min(K_desired, min_dim - 1)\n",
+        "\n",
+        "# Ensure K is at least 1, as 0 latent factors are not meaningful for SVD\n",
+        "K = max(1, K)\n",
+        "\n",
+        "U, sigma, Vt = svds(matrix, k=K)\n",
+        "sigma = np.diag(sigma)\n",
+        "\n",
+        "predicted_ratings = np.dot(np.dot(U, sigma), Vt)\n",
+        "cf_predictions_df = pd.DataFrame(\n",
+        "    predicted_ratings,\n",
+        "    index=pivot_df.index,\n",
+        "    columns=pivot_df.columns\n",
+        ").transpose()"
+      ],
+      "id": "YRzK8j-_crRk",
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "66Y-JJKFcrRl"
+      },
+      "source": [
+        "## 8. Log to MLflow & Export Artifacts"
+      ],
+      "id": "66Y-JJKFcrRl"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 66,
+          "referenced_widgets": [
+            "bb407cc745fa4879a090b73b8c68994e",
+            "62c4ab908f654753bf074035da7d1e15",
+            "3a2b28afabf54c4cb744f431a7a87ec3",
+            "6960058879d442479a3c8e14e98afdc6",
+            "09ee1ce8d9bc4c319578436b4aeb8fe7",
+            "2c3b4ad90e6e472a8642d3732efef615",
+            "774891911f384161996f9eb7189988d3",
+            "5348c141678f42d58e51078b75e71462",
+            "1f11f3f43e3849be9a6e8f4bb9ea1d77",
+            "65e73c8909a4407abb2f6a3dcaa5138f",
+            "1d5b52a4aabc496d8ee6fff9111aa151"
+          ]
+        },
+        "id": "vxYE_LZicrRl",
+        "outputId": "4638281b-88c7-4032-81c2-61c01d7023f2"
+      },
+      "execution_count": 11,
+      "source": [
+        "with mlflow.start_run() as run:\n",
+        "    mlflow.log_param('latent_factors', K)\n",
+        "    mlflow.log_param('num_users', pivot_df.shape[0])\n",
+        "    mlflow.log_param('num_hotels', pivot_df.shape[1])\n",
+        "\n",
+        "    sparsity = 1 - (np.count_nonzero(matrix) / matrix.size)\n",
+        "    mlflow.log_metric('matrix_sparsity', sparsity)\n",
+        "\n",
+        "    # Save artifacts locally\n",
+        "    joblib.dump(cf_predictions_df, 'cf_predictions_df.pkl')\n",
+        "    joblib.dump(label_encoder, 'hotel_label_encoder.pkl')\n",
+        "    joblib.dump(df[['hotel_encoded', 'name']].drop_duplicates(), 'hotel_lookup.pkl')\n",
+        "\n",
+        "    mlflow.log_artifact('cf_predictions_df.pkl')\n",
+        "    mlflow.log_artifact('hotel_label_encoder.pkl')\n",
+        "    mlflow.log_artifact('hotel_lookup.pkl')\n",
+        "\n",
+        "    # Export artifacts from MLflow to Drive\n",
+        "    temp_dir = 'temp_hotel_artifacts'\n",
+        "    os.makedirs(temp_dir, exist_ok=True)\n",
+        "\n",
+        "    downloaded = mlflow.artifacts.download_artifacts(\n",
+        "        run_id=run.info.run_id,\n",
+        "        dst_path=temp_dir\n",
+        "    )\n",
+        "\n",
+        "    shutil.copytree(downloaded, MODEL_EXPORT_PATH, dirs_exist_ok=True)\n",
+        "    shutil.rmtree(temp_dir)\n",
+        "\n",
+        "    print('Hotel recommendation artifacts exported successfully')"
+      ],
+      "id": "vxYE_LZicrRl",
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "Downloading artifacts:   0%|          | 0/3 [00:00<?, ?it/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "bb407cc745fa4879a090b73b8c68994e"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Hotel recommendation artifacts exported successfully\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Tz_2STY5crRl"
+      },
+      "source": [
+        "## ✅ Model Ready for Streamlit\n",
+        "\n",
+        "- `cf_predictions_df.pkl`\n",
+        "- `hotel_label_encoder.pkl`\n",
+        "- `hotel_lookup.pkl`\n",
+        "\n",
+        "Streamlit can now load these files **without MLflow dependency**."
+      ],
+      "id": "Tz_2STY5crRl"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "7018941e"
+      },
+      "source": [
+        "# Task\n",
+        "Modify the `vxYE_LZicrRl` cell to enhance MLflow logging and add evaluation metrics. This involves:\n",
+        "\n",
+        "1.  **Adding a helper function for calculating RMSE.**\n",
+        "2.  **Implementing a hyperparameter tuning loop for 'K' (latent factors)**, which will iterate through a range of `K` values.\n",
+        "3.  **Logging the train and test RMSE for each 'K' value in MLflow** using nested runs.\n",
+        "4.  **Tracking the best performing model based on test RMSE** and saving its `cf_predictions_df`, `label_encoder`, `hotel_lookup`, `user_to_idx`, and `hotel_to_idx` artifacts to the specified `MODEL_EXPORT_PATH`.\n",
+        "5.  **Implementing `predict_rating` and `get_top_n_recommendations` functions** to leverage the best model.\n",
+        "6.  **Adding code to demonstrate sample predictions and recommendations** using the loaded best model artifacts."
+      ],
+      "id": "7018941e"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "cd827178"
+      },
+      "source": [
+        "## Enhance MLflow Logging and Add Evaluation Metrics\n",
+        "\n",
+        "### Subtask:\n",
+        "Modify the MLflow logging cell (`vxYE_LZicrRl`) to include a helper function for calculating RMSE, implement a hyperparameter tuning loop for the 'K' (latent factors) parameter, log the train and test RMSE for each 'K' value in MLflow, track the best performing model based on test RMSE, and save its artifacts.\n"
+      ],
+      "id": "cd827178"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "56dffda5"
+      },
+      "source": [
+        "**Reasoning**:\n",
+        "The subtask requires modifying the MLflow logging cell to include RMSE calculation, hyperparameter tuning for 'K' (latent factors), logging train/test RMSE for each 'K' value, tracking the best performing model based on test RMSE, and saving its artifacts. This involves defining a helper RMSE function, creating user/hotel ID mappings, iterating through a list of 'K' values, performing SVD, calculating RMSE, logging metrics and parameters with MLflow, and finally exporting the artifacts of the best model.\n",
+        "\n"
+      ],
+      "id": "56dffda5"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 205,
+          "referenced_widgets": [
+            "292ce0ce227840498e856f9f7708f966",
+            "ae809aa183c64ffcbb9b3041eb5607a2",
+            "e9f10ab1edfe421a8fb017a763059d8d",
+            "c508f2e885484219aead9f15fdd65f7b",
+            "77130cc637354b3aaba1bcb44a4ff65f",
+            "aa61b3ef8d6a4882b32ac8b714746586",
+            "60f80bd459e7407584f586b46e3df288",
+            "ea0d0c784ed14b1fb38e1eac61b22cd7",
+            "cf40a9565fc44710b85baafa3e470313",
+            "41980bc73bda4128a24555af19e50ffb",
+            "90caa326f4cc45b2a8d3dc7d6cb33b3c"
+          ]
+        },
+        "id": "655c37dc",
+        "outputId": "e0d33053-4449-4b40-e4ba-995153d87fbb"
+      },
+      "source": [
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import joblib\n",
+        "import mlflow\n",
+        "import os\n",
+        "import shutil\n",
+        "\n",
+        "# Ensure these are defined from previous cells or re-defined for this cell's context\n",
+        "# (Assuming `df`, `pivot_df`, `train_df`, `test_df`, `label_encoder`, `matrix`, `MODEL_EXPORT_PATH` are available from previous executed cells)\n",
+        "\n",
+        "# 1. Define a helper function for calculating RMSE\n",
+        "def rmse(y_true, y_pred):\n",
+        "    return np.sqrt(np.mean((y_true - y_pred)**2))\n",
+        "\n",
+        "# 2. Create mappings for user and hotel IDs to their corresponding matrix indices\n",
+        "user_to_idx = {user: i for i, user in enumerate(pivot_df.index)}\n",
+        "hotel_to_idx = {hotel: i for i, hotel in enumerate(pivot_df.columns)}\n",
+        "\n",
+        "# Static artifacts needed for export (derived once)\n",
+        "hotel_lookup_df = df[['hotel_encoded', 'name']].drop_duplicates()\n",
+        "\n",
+        "# 3. Define a list of K values for hyperparameter tuning\n",
+        "K_values = [5, 10, 15, 20, 25, 30]\n",
+        "min_dim = min(matrix.shape)\n",
+        "\n",
+        "# Filter K_values to ensure 0 < k < min(matrix.shape)\n",
+        "# SVD requires k to be strictly less than min(matrix.shape) and greater than 0\n",
+        "K_values = [k for k in K_values if 0 < k < min_dim]\n",
+        "\n",
+        "# If no valid K values are left, provide a default if possible (e.g., min_dim - 1)\n",
+        "if not K_values and min_dim > 1:\n",
+        "    K_values = [min_dim - 1]\n",
+        "elif not K_values:\n",
+        "    print(\"Warning: No valid K values for SVD. min(matrix.shape) is too small.\")\n",
+        "    # Proceeding without SVD tuning if min_dim <= 1\n",
+        "\n",
+        "# 4. Initialize best tracking variables\n",
+        "best_test_rmse = np.inf\n",
+        "best_child_run_id = None\n",
+        "\n",
+        "# Temporary directory for saving artifacts locally before logging to MLflow\n",
+        "temp_artifact_dir = 'mlflow_run_artifacts_temp'\n",
+        "os.makedirs(temp_artifact_dir, exist_ok=True)\n",
+        "\n",
+        "# 5. Start a main (parent) MLflow run for hyperparameter tuning\n",
+        "with mlflow.start_run(run_name='Hotel CF Hyperparameter Tuning') as parent_run:\n",
+        "    mlflow.log_param('num_users', pivot_df.shape[0])\n",
+        "    mlflow.log_param('num_hotels', pivot_df.shape[1])\n",
+        "    sparsity = 1 - (np.count_nonzero(matrix) / matrix.size)\n",
+        "    mlflow.log_metric('matrix_sparsity', sparsity)\n",
+        "\n",
+        "    print(f\"Starting hyperparameter tuning for K values: {K_values}\")\n",
+        "\n",
+        "    # 6. Iterate through each k_value for tuning\n",
+        "    for k_value in K_values:\n",
+        "        # Ensure K satisfies the condition 0 < k < min(A.shape)\n",
+        "        current_K = min(k_value, min_dim - 1) # Adjust k if it exceeds matrix dimensions\n",
+        "        if current_K <= 0:\n",
+        "            print(f\"Skipping K={k_value} as it's not a valid number of latent factors (current_K={current_K}).\")\n",
+        "            continue\n",
+        "\n",
+        "        # a. Start a nested MLflow run for each K value\n",
+        "        with mlflow.start_run(nested=True, run_name=f'K={current_K}') as child_run:\n",
+        "            print(f\"  Running with K={current_K}\")\n",
+        "            # b. Log the current k_value as a parameter\n",
+        "            mlflow.log_param('latent_factors', current_K)\n",
+        "\n",
+        "            # c. Perform Singular Value Decomposition (SVD)\n",
+        "            U, sigma, Vt = svds(matrix, k=current_K)\n",
+        "            sigma = np.diag(sigma)\n",
+        "\n",
+        "            # d. Reconstruct the predicted_ratings matrix\n",
+        "            predicted_ratings = np.dot(np.dot(U, sigma), Vt)\n",
+        "\n",
+        "            # e. Create cf_predictions_df DataFrame\n",
+        "            cf_predictions_df = pd.DataFrame(\n",
+        "                predicted_ratings,\n",
+        "                index=pivot_df.index,\n",
+        "                columns=pivot_df.columns\n",
+        "            ).transpose() # Transpose for easier lookup by hotel_encoded as index for recommendation\n",
+        "\n",
+        "            # f. Calculate the training RMSE\n",
+        "            train_user_indices = train_df['userCode'].map(user_to_idx).values\n",
+        "            train_hotel_indices = train_df['hotel_encoded'].map(hotel_to_idx).values\n",
+        "            train_actual_prices = train_df['price'].values\n",
+        "            train_predicted_prices = predicted_ratings[train_user_indices, train_hotel_indices]\n",
+        "            current_train_rmse = rmse(train_actual_prices, train_predicted_prices)\n",
+        "            mlflow.log_metric('train_rmse', current_train_rmse)\n",
+        "\n",
+        "            # g. Calculate the testing RMSE\n",
+        "            test_user_indices = test_df['userCode'].map(user_to_idx).values\n",
+        "            test_hotel_indices = test_df['hotel_encoded'].map(hotel_to_idx).values\n",
+        "            test_actual_prices = test_df['price'].values\n",
+        "            test_predicted_prices = predicted_ratings[test_user_indices, test_hotel_indices]\n",
+        "            current_test_rmse = rmse(test_actual_prices, test_predicted_prices)\n",
+        "            mlflow.log_metric('test_rmse', current_test_rmse)\n",
+        "\n",
+        "            print(f\"    Train RMSE: {current_train_rmse:.4f}, Test RMSE: {current_test_rmse:.4f}\")\n",
+        "\n",
+        "            # h. Compare the current test_rmse with best_test_rmse\n",
+        "            if current_test_rmse < best_test_rmse:\n",
+        "                best_test_rmse = current_test_rmse\n",
+        "                best_child_run_id = child_run.info.run_id\n",
+        "                print(f\"    New best model found with K={current_K} and Test RMSE: {best_test_rmse:.4f}\")\n",
+        "\n",
+        "            # i. Log this run's artifacts (so the best run's artifacts can be downloaded later)\n",
+        "            # Save artifacts locally temporarily before MLflow logs them\n",
+        "            joblib.dump(cf_predictions_df, os.path.join(temp_artifact_dir, 'cf_predictions_df.pkl'))\n",
+        "            joblib.dump(label_encoder, os.path.join(temp_artifact_dir, 'hotel_label_encoder.pkl'))\n",
+        "            joblib.dump(hotel_lookup_df, os.path.join(temp_artifact_dir, 'hotel_lookup.pkl'))\n",
+        "            joblib.dump(user_to_idx, os.path.join(temp_artifact_dir, 'user_to_idx.pkl'))\n",
+        "            joblib.dump(hotel_to_idx, os.path.join(temp_artifact_dir, 'hotel_to_idx.pkl'))\n",
+        "\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'cf_predictions_df.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'hotel_label_encoder.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'hotel_lookup.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'user_to_idx.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'hotel_to_idx.pkl'))\n",
+        "\n",
+        "# 7. After the tuning loop finishes, export artifacts of the best model to Drive\n",
+        "print(f\"\\nHyperparameter tuning complete. Best test RMSE: {best_test_rmse:.4f} (Run ID: {best_child_run_id})\")\n",
+        "\n",
+        "if best_child_run_id:\n",
+        "    # Clear the target export path before copying to ensure only the best model's artifacts are present\n",
+        "    if os.path.exists(MODEL_EXPORT_PATH):\n",
+        "        shutil.rmtree(MODEL_EXPORT_PATH)\n",
+        "    os.makedirs(MODEL_EXPORT_PATH, exist_ok=True)\n",
+        "\n",
+        "    print(f\"Downloading artifacts from best run ({best_child_run_id}) to export directory...\")\n",
+        "    # Download artifacts of the best run to the temporary directory\n",
+        "    downloaded_artifacts_path = mlflow.artifacts.download_artifacts(\n",
+        "        run_id=best_child_run_id,\n",
+        "        dst_path=temp_artifact_dir\n",
+        "    )\n",
+        "\n",
+        "    # Copy downloaded artifacts to the final MODEL_EXPORT_PATH on Drive\n",
+        "    for item_name in os.listdir(downloaded_artifacts_path):\n",
+        "        source_path = os.path.join(downloaded_artifacts_path, item_name)\n",
+        "        destination_path = os.path.join(MODEL_EXPORT_PATH, item_name)\n",
+        "        if os.path.isfile(source_path):\n",
+        "            shutil.copy2(source_path, destination_path)\n",
+        "\n",
+        "    print(f'Best model artifacts exported to {MODEL_EXPORT_PATH}')\n",
+        "else:\n",
+        "    print(\"No valid runs completed or best model could not be identified.\")\n",
+        "\n",
+        "# Clean up the temporary directory\n",
+        "if os.path.exists(temp_artifact_dir):\n",
+        "    shutil.rmtree(temp_artifact_dir)\n",
+        "    print(f\"Cleaned up temporary artifact directory: {temp_artifact_dir}\")\n"
+      ],
+      "id": "655c37dc",
+      "execution_count": 12,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Starting hyperparameter tuning for K values: [5]\n",
+            "  Running with K=5\n",
+            "    Train RMSE: 261.7743, Test RMSE: 995.5737\n",
+            "    New best model found with K=5 and Test RMSE: 995.5737\n",
+            "\n",
+            "Hyperparameter tuning complete. Best test RMSE: 995.5737 (Run ID: 14827ac6b2b4476ebc8e176d78b159ef)\n",
+            "Downloading artifacts from best run (14827ac6b2b4476ebc8e176d78b159ef) to export directory...\n"
+          ]
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "Downloading artifacts:   0%|          | 0/5 [00:00<?, ?it/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "292ce0ce227840498e856f9f7708f966"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Best model artifacts exported to /content/drive/MyDrive/Labmentix Projects/Travel planner MLops/models/hotel_recommendation\n",
+            "Cleaned up temporary artifact directory: mlflow_run_artifacts_temp\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "dba52c86"
+      },
+      "source": [
+        "**Reasoning**:\n",
+        "The previous step completed the hyperparameter tuning and logging of the best model artifacts. The subtask now requires implementing `predict_rating` and `get_top_n_recommendations` functions and demonstrating their usage with the loaded best model artifacts. This involves loading the saved artifacts and then defining and calling the recommendation functions.\n",
+        "\n"
+      ],
+      "id": "dba52c86"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "8dd10293",
+        "outputId": "5744d05b-9d1f-40af-eedd-7148d683b127"
+      },
+      "source": [
+        "import joblib\n",
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "import os\n",
+        "\n",
+        "# Load the best model artifacts from the MODEL_EXPORT_PATH\n",
+        "# Ensure MODEL_EXPORT_PATH is defined as in previous cells\n",
+        "# MODEL_EXPORT_PATH = '/content/drive/MyDrive/Labmentix Projects/Travel planner MLops/models/hotel_recommendation'\n",
+        "\n",
+        "best_cf_predictions_df = joblib.load(os.path.join(MODEL_EXPORT_PATH, 'cf_predictions_df.pkl'))\n",
+        "best_hotel_label_encoder = joblib.load(os.path.join(MODEL_EXPORT_PATH, 'hotel_label_encoder.pkl'))\n",
+        "best_hotel_lookup_df = joblib.load(os.path.join(MODEL_EXPORT_PATH, 'hotel_lookup.pkl'))\n",
+        "best_user_to_idx = joblib.load(os.path.join(MODEL_EXPORT_PATH, 'user_to_idx.pkl'))\n",
+        "best_hotel_to_idx = joblib.load(os.path.join(MODEL_EXPORT_PATH, 'hotel_to_idx.pkl'))\n",
+        "\n",
+        "print(\"Loaded best model artifacts successfully.\")\n",
+        "\n",
+        "# 5. Implement predict_rating and get_top_n_recommendations functions\n",
+        "\n",
+        "def predict_rating(user_code, hotel_name):\n",
+        "    \"\"\"\n",
+        "    Predicts the rating a user would give to a specific hotel.\n",
+        "    \"\"\"\n",
+        "    try:\n",
+        "        hotel_encoded = best_hotel_label_encoder.transform([hotel_name])[0]\n",
+        "        if user_code not in best_cf_predictions_df.columns or hotel_encoded not in best_cf_predictions_df.index:\n",
+        "            return None # User or hotel not found in the model's scope\n",
+        "\n",
+        "        predicted_price = best_cf_predictions_df.loc[hotel_encoded, user_code]\n",
+        "        return predicted_price\n",
+        "    except Exception as e:\n",
+        "        print(f\"Error predicting rating: {e}\")\n",
+        "        return None\n",
+        "\n",
+        "def get_top_n_recommendations(user_code, n=5):\n",
+        "    \"\"\"\n",
+        "    Generates top N hotel recommendations for a given user.\n",
+        "    \"\"\"\n",
+        "    if user_code not in best_cf_predictions_df.columns:\n",
+        "        print(f\"User {user_code} not found in the model.\")\n",
+        "        return pd.DataFrame()\n",
+        "\n",
+        "    # Get all predicted ratings for the user\n",
+        "    user_predictions = best_cf_predictions_df[user_code].sort_values(ascending=False)\n",
+        "\n",
+        "    # Hotels the user has already interacted with (from original df or train/test df if available)\n",
+        "    # For this example, let's assume we don't have explicit past interactions readily available\n",
+        "    # and recommend based purely on highest predicted price.\n",
+        "    # In a real system, you'd filter out hotels the user has already visited/rated.\n",
+        "\n",
+        "    # Get the top N recommendations\n",
+        "    top_n_encoded = user_predictions.head(n).index.tolist()\n",
+        "    top_n_names = best_hotel_lookup_df[best_hotel_lookup_df['hotel_encoded'].isin(top_n_encoded)]\n",
+        "\n",
+        "    # Merge with predicted prices to show recommended hotel name and predicted price\n",
+        "    recommendations = pd.DataFrame({\n",
+        "        'hotel_encoded': top_n_encoded,\n",
+        "        'predicted_price': [user_predictions.loc[he] for he in top_n_encoded]\n",
+        "    })\n",
+        "    recommendations = recommendations.merge(best_hotel_lookup_df, on='hotel_encoded', how='left')\n",
+        "    recommendations = recommendations.sort_values(by='predicted_price', ascending=False)\n",
+        "\n",
+        "    return recommendations[['name', 'predicted_price']]\n",
+        "\n",
+        "# 6. Demonstrate sample predictions and recommendations\n",
+        "\n",
+        "print(\"\\n--- Sample Prediction ---\")\n",
+        "sample_user = pivot_df.index[0] # Get a user from the trained model\n",
+        "sample_hotel_name = best_hotel_label_encoder.inverse_transform([best_cf_predictions_df.index[0]])[0] # Get a hotel name\n",
+        "predicted_price = predict_rating(sample_user, sample_hotel_name)\n",
+        "if predicted_price is not None:\n",
+        "    print(f\"Predicted price for user {sample_user} at {sample_hotel_name}: {predicted_price:.2f}\")\n",
+        "else:\n",
+        "    print(f\"Could not predict price for user {sample_user} at {sample_hotel_name}.\")\n",
+        "\n",
+        "print(\"\\n--- Top 5 Recommendations ---\")\n",
+        "sample_user_for_reco = pivot_df.index[1] # Another sample user\n",
+        "top_recommendations = get_top_n_recommendations(sample_user_for_reco, n=5)\n",
+        "if not top_recommendations.empty:\n",
+        "    print(f\"Top 5 recommendations for user {sample_user_for_reco}:\")\n",
+        "    print(top_recommendations.to_markdown(index=False))\n",
+        "else:\n",
+        "    print(f\"No recommendations for user {sample_user_for_reco}.\")\n",
+        "\n",
+        "# Try a user not in the trained model (if any, otherwise just show behavior for existing user)\n",
+        "print(\"\\n--- Recommendations for user not in model (example) ---\")\n",
+        "non_existent_user = -999 # A user code unlikely to exist\n",
+        "no_recommendations = get_top_n_recommendations(non_existent_user)\n",
+        "if no_recommendations.empty:\n",
+        "    print(f\"As expected, no recommendations for non-existent user {non_existent_user}.\")\n"
+      ],
+      "id": "8dd10293",
+      "execution_count": 13,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Loaded best model artifacts successfully.\n",
+            "\n",
+            "--- Sample Prediction ---\n",
+            "Predicted price for user 0 at Hotel A: 874.55\n",
+            "\n",
+            "--- Top 5 Recommendations ---\n",
+            "Top 5 recommendations for user 1:\n",
+            "| name     |   predicted_price |\n",
+            "|:---------|------------------:|\n",
+            "| Hotel BP |         229.609   |\n",
+            "| Hotel Z  |          43.0213  |\n",
+            "| Hotel CB |          35.9702  |\n",
+            "| Hotel AF |          15.6082  |\n",
+            "| Hotel BW |           9.98514 |\n",
+            "\n",
+            "--- Recommendations for user not in model (example) ---\n",
+            "User -999 not found in the model.\n",
+            "As expected, no recommendations for non-existent user -999.\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "9274f33f"
+      },
+      "source": [
+        "## Summary:\n",
+        "\n",
+        "### Data Analysis Key Findings\n",
+        "\n",
+        "*   A helper function `rmse` was successfully implemented to calculate the Root Mean Squared Error.\n",
+        "*   MLflow was effectively used for hyperparameter tuning of the 'K' (latent factors) parameter. A parent run captured overall metadata like `num_users`, `num_hotels`, and `matrix_sparsity`, while nested runs logged the `latent_factors`, `train_rmse`, and `test_rmse` for each `K` value.\n",
+        "*   The hyperparameter tuning loop was performed for 'K' values, but due to the small minimum dimension of the data matrix, only `K=5` was a valid parameter for SVD.\n",
+        "*   The model with `K=5` was identified as the best performing model, achieving a test RMSE of approximately 995.57.\n",
+        "*   Artifacts of the best model, including `cf_predictions_df`, `label_encoder`, `hotel_lookup`, `user_to_idx`, and `hotel_to_idx`, were successfully logged to MLflow and then exported to the specified `MODEL_EXPORT_PATH`.\n",
+        "*   Two essential functions were implemented: `predict_rating(user_code, hotel_name)` to estimate a user's rating for a specific hotel, and `get_top_n_recommendations(user_code, n=5)` to provide personalized hotel recommendations.\n",
+        "*   The functionality of these prediction and recommendation functions was demonstrated with sample inputs, showing successful predicted prices and a list of top recommendations for existing users, and correct handling for non-existent users.\n",
+        "\n",
+        "### Insights or Next Steps\n",
+        "\n",
+        "*   The limited range of valid 'K' values (only $K=5$ in this case) suggests that the underlying data matrix might be small or very sparse. Further investigation into data characteristics or exploring alternative dimensionality reduction techniques might be beneficial if more latent factors are desired.\n",
+        "*   The achieved test RMSE of approximately 995.57 for price prediction indicates that there might be room for improvement in the model's accuracy. Exploring more advanced collaborative filtering algorithms, incorporating additional features (e.g., hotel amenities, user demographics), or refining data preprocessing steps could lead to better performance.\n"
+      ],
+      "id": "9274f33f"
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Rebuild the models with higher accuracy"
+      ],
+      "metadata": {
+        "id": "xXjDG7GngsX1"
+      },
+      "id": "xXjDG7GngsX1"
+    },
+    {
+      "cell_type": "code",
+      "source": [],
+      "metadata": {
+        "id": "JH3XlffUgx9W"
+      },
+      "id": "JH3XlffUgx9W",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "d69ecbb3"
+      },
+      "source": [
+        "# Task\n",
+        "The plan is to first modify the interaction matrix calculation, then re-run the MLflow hyperparameter tuning, and finally demonstrate predictions with the newly trained model.\n",
+        "\n",
+        "## Step 1: Modify Interaction Matrix Calculation\n",
+        "\n",
+        "I will update cell `k26FmzX5crRk` to calculate user-hotel interactions using the `mean` of prices instead of the `sum`.\n",
+        "\n",
+        "```python\n",
+        "# cell_id: k26FmzX5crRk\n",
+        "interactions = df.groupby(['userCode', 'hotel_encoded'])['price'].mean().reset_index()\n",
+        "\n",
+        "# Filter interactions to ensure each userCode has at least 2 entries for stratification\n",
+        "interactions_counts = interactions.groupby('userCode').size()\n",
+        "valid_interactions_users = interactions_counts[interactions_counts >= 2].index\n",
+        "interactions = interactions[interactions['userCode'].isin(valid_interactions_users)]\n",
+        "\n",
+        "train_df, test_df = train_test_split(\n",
+        "    interactions,\n",
+        "    test_size=0.25,\n",
+        "    random_state=42,\n",
+        "    stratify=interactions['userCode']\n",
+        ")\n",
+        "\n",
+        "pivot_df = train_df.pivot(index='userCode', columns='hotel_encoded', values='price').fillna(0)\n",
+        "matrix = pivot_df.values\n",
+        "```"
+      ],
+      "id": "d69ecbb3"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "8feeceda"
+      },
+      "source": [
+        "## Modify Interaction Matrix Calculation\n",
+        "\n",
+        "### Subtask:\n",
+        "Adjust the code in cell `k26FmzX5crRk` to compute user-hotel interactions based on the `mean` of prices instead of the `sum`.\n"
+      ],
+      "id": "8feeceda"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "d86bb51a"
+      },
+      "source": [
+        "**Reasoning**:\n",
+        "The subtask requires modifying cell `k26FmzX5crRk` to calculate user-hotel interactions based on the mean of prices instead of the sum. I will update the relevant line in the code block.\n",
+        "\n"
+      ],
+      "id": "d86bb51a"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "25d59afe"
+      },
+      "source": [
+        "interactions = df.groupby(['userCode', 'hotel_encoded'])['price'].mean().reset_index()\n",
+        "\n",
+        "# Filter interactions to ensure each userCode has at least 2 entries for stratification\n",
+        "interactions_counts = interactions.groupby('userCode').size()\n",
+        "valid_interactions_users = interactions_counts[interactions_counts >= 2].index\n",
+        "interactions = interactions[interactions['userCode'].isin(valid_interactions_users)]\n",
+        "\n",
+        "train_df, test_df = train_test_split(\n",
+        "    interactions,\n",
+        "    test_size=0.25,\n",
+        "    random_state=42,\n",
+        "    stratify=interactions['userCode']\n",
+        ")\n",
+        "\n",
+        "pivot_df = train_df.pivot(index='userCode', columns='hotel_encoded', values='price').fillna(0)\n",
+        "matrix = pivot_df.values"
+      ],
+      "id": "25d59afe",
+      "execution_count": 14,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "12794a99"
+      },
+      "source": [
+        "## Re-run MLflow Hyperparameter Tuning and Model Export\n",
+        "\n",
+        "### Subtask:\n",
+        "Execute the MLflow hyperparameter tuning cell with the updated interaction matrix. This will re-train the SVD model across various 'K' values, log new train and test RMSEs, identify the best performing model, and export its artifacts to the specified MODEL_EXPORT_PATH.\n"
+      ],
+      "id": "12794a99"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ea5a6551"
+      },
+      "source": [
+        "**Reasoning**:\n",
+        "The subtask requires re-executing the MLflow hyperparameter tuning cell with the updated interaction matrix to re-train the SVD model and log new metrics and artifacts. This will be achieved by executing the specified code cell.\n",
+        "\n"
+      ],
+      "id": "ea5a6551"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 205,
+          "referenced_widgets": [
+            "824e114119164a52a3241801b5146fcf",
+            "4ec0f56656b14170af7eeffa2c94d42a",
+            "86323a615d5848dd949a60f8612db00c",
+            "bd43b0d7594041d6b726afd0b8012b49",
+            "d164c3b437bd4a14bfcbe52a56d2bfa3",
+            "bcfaef45207640ac8ed6a28cc5f363a4",
+            "5ebbcb6a2676430bbec35e290f2fa6bc",
+            "5230c86a5b864983b02372d572b96c21",
+            "96838b42724946bc96d1302fdb06295c",
+            "ddd77fb7d1524ec594208828a034a9d8",
+            "f7b8d5d650ad4734895576b67cef7628"
+          ]
+        },
+        "id": "ce8ceb46",
+        "outputId": "abab4aea-87d9-4929-d638-dcf5febc928b"
+      },
+      "source": [
+        "import numpy as np\n",
+        "import pandas as pd\n",
+        "import joblib\n",
+        "import mlflow\n",
+        "import os\n",
+        "import shutil\n",
+        "\n",
+        "# Ensure these are defined from previous cells or re-defined for this cell's context\n",
+        "# (Assuming `df`, `pivot_df`, `train_df`, `test_df`, `label_encoder`, `matrix`, `MODEL_EXPORT_PATH` are available from previous executed cells)\n",
+        "\n",
+        "# 1. Define a helper function for calculating RMSE\n",
+        "def rmse(y_true, y_pred):\n",
+        "    return np.sqrt(np.mean((y_true - y_pred)**2))\n",
+        "\n",
+        "# 2. Create mappings for user and hotel IDs to their corresponding matrix indices\n",
+        "user_to_idx = {user: i for i, user in enumerate(pivot_df.index)}\n",
+        "hotel_to_idx = {hotel: i for i, hotel in enumerate(pivot_df.columns)}\n",
+        "\n",
+        "# Static artifacts needed for export (derived once)\n",
+        "hotel_lookup_df = df[['hotel_encoded', 'name']].drop_duplicates()\n",
+        "\n",
+        "# 3. Define a list of K values for hyperparameter tuning\n",
+        "K_values = [5, 10, 15, 20, 25, 30]\n",
+        "min_dim = min(matrix.shape)\n",
+        "\n",
+        "# Filter K_values to ensure 0 < k < min(matrix.shape)\n",
+        "# SVD requires k to be strictly less than min(matrix.shape) and greater than 0\n",
+        "K_values = [k for k in K_values if 0 < k < min_dim]\n",
+        "\n",
+        "# If no valid K values are left, provide a default if possible (e.g., min_dim - 1)\n",
+        "if not K_values and min_dim > 1:\n",
+        "    K_values = [min_dim - 1]\n",
+        "elif not K_values:\n",
+        "    print(\"Warning: No valid K values for SVD. min(matrix.shape) is too small.\")\n",
+        "    # Proceeding without SVD tuning if min_dim <= 1\n",
+        "\n",
+        "# 4. Initialize best tracking variables\n",
+        "best_test_rmse = np.inf\n",
+        "best_child_run_id = None\n",
+        "\n",
+        "# Temporary directory for saving artifacts locally before logging to MLflow\n",
+        "temp_artifact_dir = 'mlflow_run_artifacts_temp'\n",
+        "os.makedirs(temp_artifact_dir, exist_ok=True)\n",
+        "\n",
+        "# 5. Start a main (parent) MLflow run for hyperparameter tuning\n",
+        "with mlflow.start_run(run_name='Hotel CF Hyperparameter Tuning') as parent_run:\n",
+        "    mlflow.log_param('num_users', pivot_df.shape[0])\n",
+        "    mlflow.log_param('num_hotels', pivot_df.shape[1])\n",
+        "    sparsity = 1 - (np.count_nonzero(matrix) / matrix.size)\n",
+        "    mlflow.log_metric('matrix_sparsity', sparsity)\n",
+        "\n",
+        "    print(f\"Starting hyperparameter tuning for K values: {K_values}\")\n",
+        "\n",
+        "    # 6. Iterate through each k_value for tuning\n",
+        "    for k_value in K_values:\n",
+        "        # Ensure K satisfies the condition 0 < k < min(A.shape)\n",
+        "        current_K = min(k_value, min_dim - 1) # Adjust k if it exceeds matrix dimensions\n",
+        "        if current_K <= 0:\n",
+        "            print(f\"Skipping K={k_value} as it's not a valid number of latent factors (current_K={current_K}).\")\n",
+        "            continue\n",
+        "\n",
+        "        # a. Start a nested MLflow run for each K value\n",
+        "        with mlflow.start_run(nested=True, run_name=f'K={current_K}') as child_run:\n",
+        "            print(f\"  Running with K={current_K}\")\n",
+        "            # b. Log the current k_value as a parameter\n",
+        "            mlflow.log_param('latent_factors', current_K)\n",
+        "\n",
+        "            # c. Perform Singular Value Decomposition (SVD)\n",
+        "            U, sigma, Vt = svds(matrix, k=current_K)\n",
+        "            sigma = np.diag(sigma)\n",
+        "\n",
+        "            # d. Reconstruct the predicted_ratings matrix\n",
+        "            predicted_ratings = np.dot(np.dot(U, sigma), Vt)\n",
+        "\n",
+        "            # e. Create cf_predictions_df DataFrame\n",
+        "            cf_predictions_df = pd.DataFrame(\n",
+        "                predicted_ratings,\n",
+        "                index=pivot_df.index,\n",
+        "                columns=pivot_df.columns\n",
+        "            ).transpose() # Transpose for easier lookup by hotel_encoded as index for recommendation\n",
+        "\n",
+        "            # f. Calculate the training RMSE\n",
+        "            train_user_indices = train_df['userCode'].map(user_to_idx).values\n",
+        "            train_hotel_indices = train_df['hotel_encoded'].map(hotel_to_idx).values\n",
+        "            train_actual_prices = train_df['price'].values\n",
+        "            train_predicted_prices = predicted_ratings[train_user_indices, train_hotel_indices]\n",
+        "            current_train_rmse = rmse(train_actual_prices, train_predicted_prices)\n",
+        "            mlflow.log_metric('train_rmse', current_train_rmse)\n",
+        "\n",
+        "            # g. Calculate the testing RMSE\n",
+        "            test_user_indices = test_df['userCode'].map(user_to_idx).values\n",
+        "            test_hotel_indices = test_df['hotel_encoded'].map(hotel_to_idx).values\n",
+        "            test_actual_prices = test_df['price'].values\n",
+        "            test_predicted_prices = predicted_ratings[test_user_indices, test_hotel_indices]\n",
+        "            current_test_rmse = rmse(test_actual_prices, test_predicted_prices)\n",
+        "            mlflow.log_metric('test_rmse', current_test_rmse)\n",
+        "\n",
+        "            print(f\"    Train RMSE: {current_train_rmse:.4f}, Test RMSE: {current_test_rmse:.4f}\")\n",
+        "\n",
+        "            # h. Compare the current test_rmse with best_test_rmse\n",
+        "            if current_test_rmse < best_test_rmse:\n",
+        "                best_test_rmse = current_test_rmse\n",
+        "                best_child_run_id = child_run.info.run_id\n",
+        "                print(f\"    New best model found with K={current_K} and Test RMSE: {best_test_rmse:.4f}\")\n",
+        "\n",
+        "            # i. Log this run's artifacts (so the best run's artifacts can be downloaded later)\n",
+        "            # Save artifacts locally temporarily before MLflow logs them\n",
+        "            joblib.dump(cf_predictions_df, os.path.join(temp_artifact_dir, 'cf_predictions_df.pkl'))\n",
+        "            joblib.dump(label_encoder, os.path.join(temp_artifact_dir, 'hotel_label_encoder.pkl'))\n",
+        "            joblib.dump(hotel_lookup_df, os.path.join(temp_artifact_dir, 'hotel_lookup.pkl'))\n",
+        "            joblib.dump(user_to_idx, os.path.join(temp_artifact_dir, 'user_to_idx.pkl'))\n",
+        "            joblib.dump(hotel_to_idx, os.path.join(temp_artifact_dir, 'hotel_to_idx.pkl'))\n",
+        "\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'cf_predictions_df.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'hotel_label_encoder.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'hotel_lookup.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'user_to_idx.pkl'))\n",
+        "            mlflow.log_artifact(os.path.join(temp_artifact_dir, 'hotel_to_idx.pkl'))\n",
+        "\n",
+        "# 7. After the tuning loop finishes, export artifacts of the best model to Drive\n",
+        "print(f\"\\nHyperparameter tuning complete. Best test RMSE: {best_test_rmse:.4f} (Run ID: {best_child_run_id})\")\n",
+        "\n",
+        "if best_child_run_id:\n",
+        "    # Clear the target export path before copying to ensure only the best model's artifacts are present\n",
+        "    if os.path.exists(MODEL_EXPORT_PATH):\n",
+        "        shutil.rmtree(MODEL_EXPORT_PATH)\n",
+        "    os.makedirs(MODEL_EXPORT_PATH, exist_ok=True)\n",
+        "\n",
+        "    print(f\"Downloading artifacts from best run ({best_child_run_id}) to export directory...\")\n",
+        "    # Download artifacts of the best run to the temporary directory\n",
+        "    downloaded_artifacts_path = mlflow.artifacts.download_artifacts(\n",
+        "        run_id=best_child_run_id,\n",
+        "        dst_path=temp_artifact_dir\n",
+        "    )\n",
+        "\n",
+        "    # Copy downloaded artifacts to the final MODEL_EXPORT_PATH on Drive\n",
+        "    for item_name in os.listdir(downloaded_artifacts_path):\n",
+        "        source_path = os.path.join(downloaded_artifacts_path, item_name)\n",
+        "        destination_path = os.path.join(MODEL_EXPORT_PATH, item_name)\n",
+        "        if os.path.isfile(source_path):\n",
+        "            shutil.copy2(source_path, destination_path)\n",
+        "\n",
+        "    print(f'Best model artifacts exported to {MODEL_EXPORT_PATH}')\n",
+        "else:\n",
+        "    print(\"No valid runs completed or best model could not be identified.\")\n",
+        "\n",
+        "# Clean up the temporary directory\n",
+        "if os.path.exists(temp_artifact_dir):\n",
+        "    shutil.rmtree(temp_artifact_dir)\n",
+        "    print(f\"Cleaned up temporary artifact directory: {temp_artifact_dir}\")"
+      ],
+      "id": "ce8ceb46",
+      "execution_count": 15,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Starting hyperparameter tuning for K values: [5]\n",
+            "  Running with K=5\n",
+            "    Train RMSE: 40.9085, Test RMSE: 199.3636\n",
+            "    New best model found with K=5 and Test RMSE: 199.3636\n",
+            "\n",
+            "Hyperparameter tuning complete. Best test RMSE: 199.3636 (Run ID: cd04ac8eada143e5838647324bb30f09)\n",
+            "Downloading artifacts from best run (cd04ac8eada143e5838647324bb30f09) to export directory...\n"
+          ]
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "Downloading artifacts:   0%|          | 0/5 [00:00<?, ?it/s]"
+            ],
+            "application/vnd.jupyter.widget-view+json": {
+              "version_major": 2,
+              "version_minor": 0,
+              "model_id": "824e114119164a52a3241801b5146fcf"
+            }
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Best model artifacts exported to /content/drive/MyDrive/Labmentix Projects/Travel planner MLops/models/hotel_recommendation\n",
+            "Cleaned up temporary artifact directory: mlflow_run_artifacts_temp\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "f734552a"
+      },
+      "source": [
+        "## Demonstrate Predictions with New Best Model\n",
+        "\n",
+        "### Subtask:\n",
+        "Verify the functionality of the newly trained model by loading its artifacts and demonstrating sample predictions and top N recommendations.\n"
+      ],
+      "id": "f734552a"
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "b15532c6"
+      },
+      "source": [
+        "## Summary:\n",
+        "\n",
+        "### Data Analysis Key Findings\n",
+        "*   The calculation for user-hotel interactions was modified from using the `sum` of prices to the `mean` of prices.\n",
+        "*   The MLflow hyperparameter tuning process for the SVD model was re-executed.\n",
+        "*   Due to the size constraints of the interaction matrix (`min_dim`), only `K=5` was identified as a valid number of latent factors among the tested `K_values`.\n",
+        "*   The best model, trained with `K=5` latent factors, achieved a `Train RMSE` of \\$40.9085\\$ and a `Test RMSE` of \\$199.3636\\$.\n",
+        "*   The artifacts of this best-performing model were successfully exported to the specified directory: `/content/drive/MyDrive/Labmentix Projects/Travel planner MLops/models/hotel_recommendation`.\n",
+        "\n",
+        "### Insights or Next Steps\n",
+        "*   The constraint on valid `K` values (only `K=5` was tested) due to a small matrix dimension might indicate a need to review the data quantity or structure to allow for a broader range of latent factors and potentially better model performance.\n",
+        "*   The next step is to verify the functionality of the newly trained model by loading its artifacts and demonstrating sample predictions and top N recommendations.\n"
+      ],
+      "id": "b15532c6"
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "77747846",
+        "outputId": "ac287d2d-b9de-4fc3-9af6-0c82dd522d58"
+      },
+      "source": [
+        "# Demonstrate another sample prediction using the best model\n",
+        "print(\"\\n--- New Sample Prediction ---\")\n",
+        "\n",
+        "# Get a different sample user and hotel from the trained model's scope\n",
+        "# Ensure these indices are valid within the pivot_df and hotel_lookup_df\n",
+        "if len(pivot_df.index) > 2:\n",
+        "    sample_user_pred = pivot_df.index[2] # Get a third user from the trained model\n",
+        "else:\n",
+        "    sample_user_pred = pivot_df.index[0] # Fallback if not enough users\n",
+        "\n",
+        "# Try to find a different hotel to predict for, if available\n",
+        "if len(best_cf_predictions_df.index) > 1:\n",
+        "    sample_hotel_encoded_pred = best_cf_predictions_df.index[1] # Get a second hotel_encoded\n",
+        "else:\n",
+        "    sample_hotel_encoded_pred = best_cf_predictions_df.index[0] # Fallback\n",
+        "\n",
+        "sample_hotel_name_pred = best_hotel_label_encoder.inverse_transform([sample_hotel_encoded_pred])[0]\n",
+        "\n",
+        "predicted_price_new = predict_rating(sample_user_pred, sample_hotel_name_pred)\n",
+        "\n",
+        "if predicted_price_new is not None:\n",
+        "    print(f\"Predicted price for user {sample_user_pred} at {sample_hotel_name_pred}: {predicted_price_new:.2f}\")\n",
+        "else:\n",
+        "    print(f\"Could not predict price for user {sample_user_pred} at {sample_hotel_name_pred}.\")\n"
+      ],
+      "id": "77747846",
+      "execution_count": 16,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\n",
+            "--- New Sample Prediction ---\n",
+            "Predicted price for user 2 at Hotel AF: 330.01\n"
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "Python 3",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python",
+      "version": "3.10"
+    },
+    "colab": {
+      "provenance": [],
+      "gpuType": "T4"
+    },
+    "accelerator": "GPU",
+    "widgets": {
+      "application/vnd.jupyter.widget-state+json": {
+        "bb407cc745fa4879a090b73b8c68994e": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HBoxModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HBoxModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HBoxView",
+            "box_style": "",
+            "children": [
+              "IPY_MODEL_62c4ab908f654753bf074035da7d1e15",
+              "IPY_MODEL_3a2b28afabf54c4cb744f431a7a87ec3",
+              "IPY_MODEL_6960058879d442479a3c8e14e98afdc6"
+            ],
+            "layout": "IPY_MODEL_09ee1ce8d9bc4c319578436b4aeb8fe7"
+          }
+        },
+        "62c4ab908f654753bf074035da7d1e15": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_2c3b4ad90e6e472a8642d3732efef615",
+            "placeholder": "​",
+            "style": "IPY_MODEL_774891911f384161996f9eb7189988d3",
+            "value": "Downloading artifacts: 100%"
+          }
+        },
+        "3a2b28afabf54c4cb744f431a7a87ec3": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "FloatProgressModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "FloatProgressModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "ProgressView",
+            "bar_style": "success",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_5348c141678f42d58e51078b75e71462",
+            "max": 3,
+            "min": 0,
+            "orientation": "horizontal",
+            "style": "IPY_MODEL_1f11f3f43e3849be9a6e8f4bb9ea1d77",
+            "value": 3
+          }
+        },
+        "6960058879d442479a3c8e14e98afdc6": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_65e73c8909a4407abb2f6a3dcaa5138f",
+            "placeholder": "​",
+            "style": "IPY_MODEL_1d5b52a4aabc496d8ee6fff9111aa151",
+            "value": " 3/3 [00:00&lt;00:00, 106.99it/s]"
+          }
+        },
+        "09ee1ce8d9bc4c319578436b4aeb8fe7": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "2c3b4ad90e6e472a8642d3732efef615": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "774891911f384161996f9eb7189988d3": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        },
+        "5348c141678f42d58e51078b75e71462": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "1f11f3f43e3849be9a6e8f4bb9ea1d77": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "ProgressStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "ProgressStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "bar_color": null,
+            "description_width": ""
+          }
+        },
+        "65e73c8909a4407abb2f6a3dcaa5138f": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "1d5b52a4aabc496d8ee6fff9111aa151": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        },
+        "292ce0ce227840498e856f9f7708f966": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HBoxModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HBoxModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HBoxView",
+            "box_style": "",
+            "children": [
+              "IPY_MODEL_ae809aa183c64ffcbb9b3041eb5607a2",
+              "IPY_MODEL_e9f10ab1edfe421a8fb017a763059d8d",
+              "IPY_MODEL_c508f2e885484219aead9f15fdd65f7b"
+            ],
+            "layout": "IPY_MODEL_77130cc637354b3aaba1bcb44a4ff65f"
+          }
+        },
+        "ae809aa183c64ffcbb9b3041eb5607a2": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_aa61b3ef8d6a4882b32ac8b714746586",
+            "placeholder": "​",
+            "style": "IPY_MODEL_60f80bd459e7407584f586b46e3df288",
+            "value": "Downloading artifacts: 100%"
+          }
+        },
+        "e9f10ab1edfe421a8fb017a763059d8d": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "FloatProgressModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "FloatProgressModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "ProgressView",
+            "bar_style": "success",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_ea0d0c784ed14b1fb38e1eac61b22cd7",
+            "max": 5,
+            "min": 0,
+            "orientation": "horizontal",
+            "style": "IPY_MODEL_cf40a9565fc44710b85baafa3e470313",
+            "value": 5
+          }
+        },
+        "c508f2e885484219aead9f15fdd65f7b": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_41980bc73bda4128a24555af19e50ffb",
+            "placeholder": "​",
+            "style": "IPY_MODEL_90caa326f4cc45b2a8d3dc7d6cb33b3c",
+            "value": " 5/5 [00:00&lt;00:00, 39.08it/s]"
+          }
+        },
+        "77130cc637354b3aaba1bcb44a4ff65f": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "aa61b3ef8d6a4882b32ac8b714746586": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "60f80bd459e7407584f586b46e3df288": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        },
+        "ea0d0c784ed14b1fb38e1eac61b22cd7": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "cf40a9565fc44710b85baafa3e470313": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "ProgressStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "ProgressStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "bar_color": null,
+            "description_width": ""
+          }
+        },
+        "41980bc73bda4128a24555af19e50ffb": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "90caa326f4cc45b2a8d3dc7d6cb33b3c": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        },
+        "824e114119164a52a3241801b5146fcf": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HBoxModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HBoxModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HBoxView",
+            "box_style": "",
+            "children": [
+              "IPY_MODEL_4ec0f56656b14170af7eeffa2c94d42a",
+              "IPY_MODEL_86323a615d5848dd949a60f8612db00c",
+              "IPY_MODEL_bd43b0d7594041d6b726afd0b8012b49"
+            ],
+            "layout": "IPY_MODEL_d164c3b437bd4a14bfcbe52a56d2bfa3"
+          }
+        },
+        "4ec0f56656b14170af7eeffa2c94d42a": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_bcfaef45207640ac8ed6a28cc5f363a4",
+            "placeholder": "​",
+            "style": "IPY_MODEL_5ebbcb6a2676430bbec35e290f2fa6bc",
+            "value": "Downloading artifacts: 100%"
+          }
+        },
+        "86323a615d5848dd949a60f8612db00c": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "FloatProgressModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "FloatProgressModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "ProgressView",
+            "bar_style": "success",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_5230c86a5b864983b02372d572b96c21",
+            "max": 5,
+            "min": 0,
+            "orientation": "horizontal",
+            "style": "IPY_MODEL_96838b42724946bc96d1302fdb06295c",
+            "value": 5
+          }
+        },
+        "bd43b0d7594041d6b726afd0b8012b49": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "HTMLModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_dom_classes": [],
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "HTMLModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/controls",
+            "_view_module_version": "1.5.0",
+            "_view_name": "HTMLView",
+            "description": "",
+            "description_tooltip": null,
+            "layout": "IPY_MODEL_ddd77fb7d1524ec594208828a034a9d8",
+            "placeholder": "​",
+            "style": "IPY_MODEL_f7b8d5d650ad4734895576b67cef7628",
+            "value": " 5/5 [00:00&lt;00:00, 70.30it/s]"
+          }
+        },
+        "d164c3b437bd4a14bfcbe52a56d2bfa3": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "bcfaef45207640ac8ed6a28cc5f363a4": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "5ebbcb6a2676430bbec35e290f2fa6bc": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        },
+        "5230c86a5b864983b02372d572b96c21": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "96838b42724946bc96d1302fdb06295c": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "ProgressStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "ProgressStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "bar_color": null,
+            "description_width": ""
+          }
+        },
+        "ddd77fb7d1524ec594208828a034a9d8": {
+          "model_module": "@jupyter-widgets/base",
+          "model_name": "LayoutModel",
+          "model_module_version": "1.2.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/base",
+            "_model_module_version": "1.2.0",
+            "_model_name": "LayoutModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "LayoutView",
+            "align_content": null,
+            "align_items": null,
+            "align_self": null,
+            "border": null,
+            "bottom": null,
+            "display": null,
+            "flex": null,
+            "flex_flow": null,
+            "grid_area": null,
+            "grid_auto_columns": null,
+            "grid_auto_flow": null,
+            "grid_auto_rows": null,
+            "grid_column": null,
+            "grid_gap": null,
+            "grid_row": null,
+            "grid_template_areas": null,
+            "grid_template_columns": null,
+            "grid_template_rows": null,
+            "height": null,
+            "justify_content": null,
+            "justify_items": null,
+            "left": null,
+            "margin": null,
+            "max_height": null,
+            "max_width": null,
+            "min_height": null,
+            "min_width": null,
+            "object_fit": null,
+            "object_position": null,
+            "order": null,
+            "overflow": null,
+            "overflow_x": null,
+            "overflow_y": null,
+            "padding": null,
+            "right": null,
+            "top": null,
+            "visibility": null,
+            "width": null
+          }
+        },
+        "f7b8d5d650ad4734895576b67cef7628": {
+          "model_module": "@jupyter-widgets/controls",
+          "model_name": "DescriptionStyleModel",
+          "model_module_version": "1.5.0",
+          "state": {
+            "_model_module": "@jupyter-widgets/controls",
+            "_model_module_version": "1.5.0",
+            "_model_name": "DescriptionStyleModel",
+            "_view_count": null,
+            "_view_module": "@jupyter-widgets/base",
+            "_view_module_version": "1.2.0",
+            "_view_name": "StyleView",
+            "description_width": ""
+          }
+        }
+      }
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 5
+}
