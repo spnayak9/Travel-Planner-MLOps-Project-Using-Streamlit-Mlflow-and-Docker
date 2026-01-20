@@ -8,13 +8,12 @@ from hotel_recommendation import hotel_recommendation_page
 def main():
     st.set_page_config(
         page_title="Voyage Analytics",
-        page_icon="🌍",
         layout="wide"
     )
 
     st.sidebar.title("Voyage Analytics")
-    selection = st.sidebar.radio(
-        "Navigation",
+    choice = st.sidebar.radio(
+        "Select Module",
         [
             "Home",
             "Flight Price Prediction",
@@ -23,24 +22,24 @@ def main():
         ]
     )
 
-    if selection == "Home":
-        st.title("Voyage Analytics: Integrating MLOps in Travel")
+    if choice == "Home":
+        st.title("Voyage Analytics – Travel Planner MLOps")
         st.markdown("""
-        **Production-ready ML systems** for:
-        - Flight price prediction
-        - Name-based gender classification
-        - Personalized hotel recommendations
+        **Production ML Applications**
+        - Flight Price Prediction (Regression)
+        - Gender Classification (Deep Learning)
+        - Hotel Recommendation (Collaborative Filtering)
 
-        All models are **MLflow-tracked** and **artifact-driven** (no retraining at inference).
+        All models are served **from prebuilt MLflow artifacts**.
         """)
 
-    elif selection == "Flight Price Prediction":
+    elif choice == "Flight Price Prediction":
         flight_price_prediction_page()
 
-    elif selection == "Gender Classification":
+    elif choice == "Gender Classification":
         gender_classification_page()
 
-    elif selection == "Hotel Recommendation":
+    elif choice == "Hotel Recommendation":
         hotel_recommendation_page()
 
 

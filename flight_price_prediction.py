@@ -1,74 +1,212 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import joblib
 import os
+import numpy as np
 
+# ------------------------------------------------------------------
+# Paths
+# ------------------------------------------------------------------
+MODEL_PATH = "Models/Regression_Model/model.pkl"
+DATASET_PATH = "dataset"
 
-MODEL_DIR = r"Models\Regression_Model"
+# ------------------------------------------------------------------
+# Constants (training contract)
+# ------------------------------------------------------------------
+DROP_COLUMNS = [
+    "travelCode",
+    "userCode",
+    "price",
+    "date",
+    "date_flight",
+    "date_hotel"
+]
 
+CATEGORICAL_COLS = ["flightType", "agency", "gender"]
 
+# ------------------------------------------------------------------
+# Load model
+# ------------------------------------------------------------------
 @st.cache_resource
-def load_artifacts():
-    try:
-        model = joblib.load(os.path.join(MODEL_DIR, "model.pkl"))
-        le_from = joblib.load(os.path.join(MODEL_DIR, "le_from.pkl"))
-        le_to = joblib.load(os.path.join(MODEL_DIR, "le_to.pkl"))
-        le_type = joblib.load(os.path.join(MODEL_DIR, "le_type.pkl"))
-        le_agency = joblib.load(os.path.join(MODEL_DIR, "le_agency.pkl"))
-        route_df = pd.read_csv(os.path.join(MODEL_DIR, "new_df.csv"))
-        return model, le_from, le_to, le_type, le_agency, route_df
-    except Exception as e:
-        raise RuntimeError(f"[FP-E001] Failed to load regression artifacts: {e}")
+def load_model():
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError("[FP-E001] model.pkl not found")
+    return joblib.load(MODEL_PATH)
+
+# ------------------------------------------------------------------
+# Build feature matrix (FULL training parity)
+# ------------------------------------------------------------------
+@st.cache_data
+def build_feature_matrix():
+    flights = pd.read_csv(os.path.join(DATASET_PATH, "flights.csv"))
+    users = pd.read_csv(os.path.join(DATASET_PATH, "users.csv"))
+    hotels = pd.read_csv(os.path.join(DATASET_PATH, "hotels.csv"))
+
+    # Merge flights + users
+    merged = flights.merge(
+        users,
+        left_on="userCode",
+        right_on="code",
+        how="left"
+    )
+
+    # Merge hotels
+    merged = merged.merge(
+        hotels,
+        on=["travelCode", "userCode"],
+        how="left",
+        suffixes=("_flight", "_hotel")
+    )
+
+    # --------------------------------------------------------------
+    # Date features (FLIGHT DATE ONLY)
+    # --------------------------------------------------------------
+    if "date_flight" not in merged.columns:
+        raise KeyError("[FP-E010] 'date_flight' column missing after merge")
+
+    merged["date_flight"] = pd.to_datetime(
+        merged["date_flight"], errors="coerce"
+    )
+
+    merged["month"] = merged["date_flight"].dt.month.fillna(0).astype(int)
+    merged["day"] = merged["date_flight"].dt.day.fillna(0).astype(int)
+
+    merged["is_weekend"] = (
+        merged["date_flight"].dt.weekday.isin([5, 6]).astype(int)
+    )
+
+    # --------------------------------------------------------------
+    # Hotel aggregations
+    # --------------------------------------------------------------
+    if "price_hotel" not in merged.columns:
+        raise KeyError("[FP-E011] 'price_hotel' column missing after merge")
+
+    merged["avg_price_per_day"] = (
+        merged["price_hotel"] / merged["days"]
+    ).replace([np.inf, -np.inf], 0).fillna(0)
+
+    merged["total_stay_cost"] = (
+        merged["price_hotel"] * merged["days"]
+    ).fillna(0)
+
+    # --------------------------------------------------------------
+    # Ratio feature
+    # --------------------------------------------------------------
+    merged["stay_length_ratio"] = (
+        merged["days"] / merged["time"]
+    ).replace([np.inf, -np.inf], 0).fillna(0)
+
+    # --------------------------------------------------------------
+    # Feature selection
+    # --------------------------------------------------------------
+    features = merged.drop(columns=DROP_COLUMNS, errors="ignore")
+
+    # Defensive: remove any datetime columns
+    datetime_cols = features.select_dtypes(
+        include=["datetime64[ns]"]
+    ).columns
+    features = features.drop(columns=datetime_cols, errors="ignore")
+
+    # Split categorical / numeric
+    cat_df = features[CATEGORICAL_COLS].astype(str)
+    num_df = features.drop(columns=CATEGORICAL_COLS)
+
+    # Selective one-hot encoding
+    cat_encoded = pd.get_dummies(cat_df, drop_first=True)
+
+    final_features = pd.concat([num_df, cat_encoded], axis=1)
+    # Ensure all features are numeric (critical for prediction)
+    
+    for col in final_features.columns:
+        if final_features[col].dtype == "object":
+            final_features[col] = (
+                final_features[col]
+                .astype("category")
+                .cat.codes
+                .astype(float)
+            )
 
 
+    return merged, final_features
+
+# ------------------------------------------------------------------
+# Streamlit page
+# ------------------------------------------------------------------
 def flight_price_prediction_page():
     st.title("Flight Price Prediction")
 
     try:
-        model, le_from, le_to, le_type, le_agency, route_df = load_artifacts()
+        model = load_model()
+        merged_df, feature_df = build_feature_matrix()
     except Exception as e:
         st.error(str(e))
         return
 
-    from_city = st.selectbox("From", sorted(route_df["from"].unique()))
-    to_city = st.selectbox("To", sorted(route_df["to"].unique()))
-
-    if from_city == to_city:
-        st.warning("[FP-E002] Source and destination cannot be the same.")
+    # Schema validation
+    if feature_df.shape[1] != model.n_features_in_:
+        st.error(
+            f"[FP-E002] Feature schema mismatch: "
+            f"model expects {model.n_features_in_}, "
+            f"but got {feature_df.shape[1]}"
+        )
         return
 
-    route = route_df[
-        (route_df["from"] == from_city) &
-        (route_df["to"] == to_city)
-    ]
+    st.success("Feature schema validated (26 features)")
 
-    if route.empty:
-        st.error("[FP-E003] Route data not available.")
-        return
+    # --------------------------------------------------------------
+    # Reference record selection
+    # --------------------------------------------------------------
+    st.subheader("Select Reference Trip")
 
-    time = float(route.iloc[0]["time"])
-    distance = float(route.iloc[0]["distance"])
+    idx = st.selectbox(
+        "Choose a base record",
+        merged_df.index,
+        index=0
+    )
 
-    st.info(f"Estimated Time: {time} hrs | Distance: {distance} km")
+    base_row = feature_df.loc[idx]
 
-    flight_type = st.selectbox("Flight Type", le_type.classes_)
-    agency = st.selectbox("Agency", le_agency.classes_)
-    passengers = st.number_input("Passengers", min_value=1, value=1)
+    # --------------------------------------------------------------
+    # Dynamic UI (TYPE SAFE)
+    # --------------------------------------------------------------
+    st.subheader("Adjust Feature Values")
 
-    if st.button("Predict Price"):
+    user_inputs = {}
+
+    for col in feature_df.columns:
+        col_data = feature_df[col]
+        value = base_row[col]
+
+        # Numeric features
+        if pd.api.types.is_numeric_dtype(col_data):
+            user_inputs[col] = st.number_input(
+                label=col,
+                value=float(value)
+            )
+
+        # Categorical / string features
+        else:
+            options = sorted(col_data.dropna().unique().tolist())
+
+            # Fallback if unseen value
+            default_index = options.index(value) if value in options else 0
+
+            user_inputs[col] = st.selectbox(
+                label=col,
+                options=options,
+                index=default_index
+            )
+
+    # --------------------------------------------------------------
+    # Prediction
+    # --------------------------------------------------------------
+    if st.button("Predict Flight Price"):
         try:
-            X = np.array([[
-                le_from.transform([from_city])[0],
-                le_to.transform([to_city])[0],
-                le_agency.transform([agency])[0],
-                le_type.transform([flight_type])[0],
-                time,
-                distance
-            ]])
+            X = pd.DataFrame([user_inputs], columns=feature_df.columns)
+            prediction = model.predict(X)[0]
 
-            price = model.predict(X)[0] * passengers
-            st.success(f"Predicted Price: ₹ {price:,.2f}")
+            st.success(f"Predicted Flight Price: ₹ {prediction:,.2f}")
 
         except Exception as e:
-            st.error(f"[FP-E004] Prediction failed: {e}")
+            st.error(f"[FP-E003] Prediction failed: {e}")
+
