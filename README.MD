@@ -5,4 +5,5 @@ py -3.10 -m venv .venv
 python --version
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+Streamlit run app.py
 ```
