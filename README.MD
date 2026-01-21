@@ -248,9 +248,9 @@ docker stop <container_id>
 * Gender prediction screen
 ![Gender Prediction page](Snapshots/Gender_Classification.png)
 * Flight price prediction screen
-![Flight Price Prediction](Snapshots\Flight_price_prediction.png)
+![Flight Price Prediction](Snapshots/Flight_price_prediction.png)
 * Hotel recommendation results
-![Hotel Recommendation Page](Snapshots\Hotel_recommendation.png)
+![Hotel Recommendation Page](Snapshots/Hotel_recommendation.png)
 
 ---
 
